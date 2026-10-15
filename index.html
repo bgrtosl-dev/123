@@ -197,18 +197,11 @@
     });
 
     function speak(text, volume = 1.0) {
-        return new Promise((resolve) => {
-            if (!('speechSynthesis' in window)) {
-                resolve();
-                return;
-            }
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1.2;
-            utterance.volume = volume;
-            utterance.onend = () => resolve();
-            utterance.onerror = () => resolve();
-            window.speechSynthesis.speak(utterance);
-        });
+        if (!('speechSynthesis' in window)) return;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.4; // Snappy speech rate so it fits tight beats
+        utterance.volume = volume;
+        window.speechSynthesis.speak(utterance);
     }
 
     function parseInput(inputStr) {
@@ -229,13 +222,10 @@
         return { tokens, trailingRest };
     }
 
-    async function runLoop() {
+    function runLoop() {
         isRunning = true;
         loopBtn.style.display = 'none';
         stopBtn.style.display = 'block';
-
-        const bpm = parseInt(tempoInput.value, 10);
-        const beatIntervalMs = (60 / bpm) * 1000;
 
         const { tokens, trailingRest } = parseInput(sequenceInput.value);
         let playbackQueue = [];
@@ -254,20 +244,24 @@
 
         let currentIndex = 0;
 
-        async function step() {
+        function step() {
             if (!isRunning) return;
+
+            // Fetch tempo live on every tick so slider changes apply immediately
+            const bpm = parseInt(tempoInput.value, 10);
+            const beatIntervalMs = (60 / bpm) * 1000;
 
             if (currentIndex >= playbackQueue.length) {
                 currentIndex = 0;
             }
 
             let item = playbackQueue[currentIndex];
-            statusDiv.textContent = `Playing: ${item.val}`;
+            statusDiv.textContent = `Playing: ${item.val} (${bpm} BPM)`;
 
             if (item.type === 'number') {
-                await speak(item.val.toString(), 1.0);
+                speak(item.val.toString(), 1.0);
             } else if (item.type === 'hm') {
-                await speak('hm', 0.4);
+                speak('hm', 0.4);
             }
 
             currentIndex++;
