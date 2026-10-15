@@ -1,2 +1,2 @@
 # 123
-counter for rythm
+counter for rhythm, trying to get my iPhone look silly
