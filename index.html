@@ -22,6 +22,28 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             margin-bottom: 20px;
         }
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .header-container h2 {
+            margin: 0;
+        }
+        #qr-btn {
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            vertical-align: middle;
+            color: #007aff;
+            padding: 4px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        #qr-btn:hover {
+            background: rgba(0, 122, 255, 0.1);
+        }
         label {
             display: block;
             margin-bottom: 8px;
@@ -55,6 +77,13 @@
             background: #ff3b30;
             margin-top: 10px;
         }
+        button.secondary {
+            background: #6c757d;
+            margin-top: 10px;
+            padding: 8px 16px;
+            font-size: 14px;
+            width: auto;
+        }
         button:active {
             opacity: 0.8;
         }
@@ -65,12 +94,48 @@
             margin-top: 10px;
             min-height: 24px;
         }
+        /* Modal Styles */
+        #qrModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 280px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 <body>
 
     <div class="card">
-        <h2>Metronome Counter</h2>
+        <div class="header-container">
+            <h2>Metronome Counter</h2>
+            <span id="qr-btn" title="Show QR Code">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                    <path d="M7 7h1v1H7z"></path>
+                    <path d="M18 7h1v1h-1z"></path>
+                    <path d="M18 18h1v1h-1z"></path>
+                    <path d="M7 18h1v1H7z"></path>
+                    <path d="M10 10h4v4h-4z"></path>
+                </svg>
+            </span>
+        </div>
         
         <label for="tempo">Tempo (BPM): <span id="tempoVal">80</span></label>
         <input type="range" id="tempo" min="50" max="120" value="80">
@@ -84,6 +149,15 @@
         <div id="status">Ready</div>
     </div>
 
+    <!-- QR Code Modal -->
+    <div id="qrModal">
+        <div class="modal-content">
+            <h3 style="margin-top:0; margin-bottom:15px; font-size:18px;">Scan to Open App</h3>
+            <img id="qrImg" alt="QR Code" style="width:200px; height:200px; display:block; margin:0 auto 15px auto; border-radius:8px;">
+            <button id="closeQrBtn" class="secondary">Close</button>
+        </div>
+    </div>
+
 <script>
     const tempoInput = document.getElementById('tempo');
     const tempoVal = document.getElementById('tempoVal');
@@ -92,11 +166,34 @@
     const stopBtn = document.getElementById('stopBtn');
     const statusDiv = document.getElementById('status');
 
+    // QR Modal Elements
+    const qrBtn = document.getElementById('qr-btn');
+    const qrModal = document.getElementById('qrModal');
+    const qrImg = document.getElementById('qrImg');
+    const closeQrBtn = document.getElementById('closeQrBtn');
+
     let isRunning = false;
     let timeoutId = null;
 
     tempoInput.addEventListener('input', () => {
         tempoVal.textContent = tempoInput.value;
+    });
+
+    // QR Code Modal Logic with fixed URL
+    qrBtn.addEventListener('click', () => {
+        const appUrl = 'https://bgrtosl-dev.github.io/123/';
+        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(appUrl)}`;
+        qrModal.style.display = 'flex';
+    });
+
+    closeQrBtn.addEventListener('click', () => {
+        qrModal.style.display = 'none';
+    });
+
+    qrModal.addEventListener('click', (e) => {
+        if (e.target === qrModal) {
+            qrModal.style.display = 'none';
+        }
     });
 
     function speak(text, volume = 1.0) {
