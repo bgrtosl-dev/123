@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metronome Counter PWA</title>
+    <!-- PWA Manifest inline for simplicity -->
+    <link rel="manifest" href="data:application/manifest+json,{
+        'name': 'Metronome Counter',
+        'short_name': 'Counter',
+        'start_url': '.',
+        'display': 'standalone',
+        'background_color': '#ffffff',
+        'theme_color': '#007aff'
+    }">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f4f4f6;
+            color: #333;
+            padding: 20px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+        }
+        textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        button {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button.stop {
+            background: #ff3b30;
+            margin-top: 10px;
+        }
+        button:active {
+            opacity: 0.8;
+        }
+        #status {
+            text-align: center;
+            font-weight: bold;
+            color: #007aff;
+            margin-top: 10px;
+            min-height: 24px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Metronome Counter</h2>
+        
+        <label for="tempo">Tempo (BPM): <span id="tempoVal">80</span></label>
+        <input type="range" id="tempo" min="50" max="120" value="80">
+
+        <label for="sequence">Number Sequence:</label>
+        <textarea id="sequence">34 1 1 234 3   -4</textarea>
+
+        <button id="loopBtn">Loop</button>
+        <button id="stopBtn" class="stop" style="display:none;">Stop</button>
+        
+        <div id="status">Ready</div>
+    </div>
+
+<script>
+    const tempoInput = document.getElementById('tempo');
+    const tempoVal = document.getElementById('tempoVal');
+    const sequenceInput = document.getElementById('sequence');
+    const loopBtn = document.getElementById('loopBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const statusDiv = document.getElementById('status');
+
+    let isRunning = false;
+    let timeoutId = null;
+
+    tempoInput.addEventListener('input', () => {
+        tempoVal.textContent = tempoInput.value;
+    });
+
+    // Helper to speak text using Web Speech API
+    function speak(text, volume = 1.0) {
+        return new Promise((resolve) => {
+            if (!('speechSynthesis' in window)) {
+                resolve();
+                return;
+            }
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.2; // Slightly snappy
+            utterance.volume = volume;
+            utterance.onend = () => resolve();
+            utterance.onerror = () => resolve();
+            window.speechSynthesis.speak(utterance);
+        });
+    }
+
+    // Parse the input text into a flat timeline of steps
+    function parseInput(inputStr) {
+        // Tokenize by whitespace
+        const rawTokens = inputStr.trim().split(/\s+/);
+        let tokens = [];
+        let trailingRest = 0;
+
+        for (let token of rawTokens) {
+            let num = parseInt(token, 10);
+            if (isNaN(num)) continue;
+
+            if (num < 0) {
+                // Negative number at the end represents "hm" count beats
+                trailingRest = Math.abs(num);
+            } else {
+                tokens.push(num);
+            }
+        }
+        return { tokens, trailingRest };
+    }
+
+    async function runLoop() {
+        isRunning = true;
+        loopBtn.style.display = 'none';
+        stopBtn.style.display = 'block';
+
+        const bpm = parseInt(tempoInput.value, 10);
+        const beatIntervalMs = (60 / bpm) * 1000;
+
+        const { tokens, trailingRest } = parseInput(sequenceInput.value);
+
+        // Build playback array
+        // Each token like "34" expands to speaking "1", then "2", then "3", then "4" on subsequent beats
+        // Or if it's single digits like "1", "1", it speaks them individually per beat.
+        // Looking at your example: "34" -> 1, 2, 3, 4 (spread across 4 beats)
+        
+        let playbackQueue = [];
+
+        for (let tokenNum of tokens) {
+            let digits = tokenNum.toString().split('').map(Number);
+            // If it's a multi-digit number like 234, do we say "2", "3", "4" on consecutive beats? 
+            // Yes, standard interpretation of rhythmic numbers:
+            for (let digit of digits) {
+                playbackQueue.push({ type: 'number', val: digit });
+            }
+        }
+
+        // Add trailing rest / "hm" beats
+        const restCount = trailingRest > 0 ? trailingRest : 4; // default to 4 if none specified
+        for (let i = 0; i < restCount; i++) {
+            playbackQueue.push({ type: 'hm', val: 'hm' });
+        }
+
+        let currentIndex = 0;
+
+        async function step() {
+            if (!isRunning) return;
+
+            if (currentIndex >= playbackQueue.length) {
+                currentIndex = 0; // Loop back
+            }
+
+            let item = playbackQueue[currentIndex];
+            statusDiv.textContent = `Playing: ${item.val}`;
+
+            if (item.type === 'number') {
+                await speak(item.val.toString(), 1.0);
+            } else if (item.type === 'hm') {
+                await speak('hm', 0.4); // Softly
+            }
+
+            currentIndex++;
+            if (isRunning) {
+                timeoutId = setTimeout(step, beatIntervalMs);
+            }
+        }
+
+        step();
+    }
+
+    function stopLoop() {
+        isRunning = false;
+        clearTimeout(timeoutId);
+        window.speechSynthesis.cancel();
+        loopBtn.style.display = 'block';
+        stopBtn.style.display = 'none';
+        statusDiv.textContent = 'Ready';
+    }
+
+    loopBtn.addEventListener('click', runLoop);
+    stopBtn.addEventListener('click', stopLoop);
+
+    // Register Service Worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('data:text/javascript,self.addEventListener("fetch", function(e){});').catch(() => {});
+        });
+    }
+</script>
+
+</body>
+</html>
